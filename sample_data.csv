@@ -1,0 +1,11 @@
+data,estacao,poluente,concentracao,unidade
+2024-03-10,Centro,PM2.5,18.5,µg/m³
+2024-03-10,Centro,PM10,45.0,µg/m³
+2024-03-11,Centro,PM2.5,55.2,µg/m³
+2024-03-11,Centro,PM10,120.3,µg/m³
+2024-03-12,Norte,PM2.5,80.0,µg/m³
+2024-03-12,Norte,PM10,200.0,µg/m³
+2024-03-13,Norte,PM2.5,22.0,µg/m³
+2024-03-13,Norte,PM10,40.0,µg/m³
+2024-03-14,Sul,PM2.5,abc,µg/m³
+2024-03-14,Sul,PM10,310.0,µg/m³

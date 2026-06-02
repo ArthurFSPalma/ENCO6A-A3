@@ -53,10 +53,93 @@ A norma definiu **o que calcular**. Os similares confirmaram **como estruturar a
 
 ## 3. Histórias de usuário
 
-| ID | Prioridade | História de Usuário | Critérios de Aceitação |
-|---|---|---|---|
-| **HU-01** Pesquisador | Alta | Como pesquisador, quero carregar um arquivo CSV com colunas `data`, `estacao`, `poluente`, `concentracao` e `unidade` e receber o IQAr calculado por poluente por dia, classificado conforme a CONAMA 491/2018, para agilizar minhas análises sem fazer os cálculos manualmente. | 1. O sistema aceita CSV com as colunas obrigatórias: `data` (YYYY-MM-DD), `estacao` (string), `poluente` (string, ex: PM2.5), `concentracao` (float) e `unidade` (string, ex: µg/m³). 2. Linhas com campos ausentes ou valores inválidos são ignoradas com aviso no terminal indicando a linha rejeitada. 3. O IQAr é calculado conforme as fórmulas e breakpoints da CONAMA 491/2018 para cada poluente presente no arquivo. 4. Cada resultado exibe: poluente, concentração, IQAr calculado e faixa (Boa / Moderada / Ruim / Muito Ruim / Péssima). 5. O índice geral do dia é o pior IQAr entre os poluentes calculados. |
-| **HU-02** Jornalista | Média | Como jornalista, quero receber uma listagem dos dias em que a qualidade do ar ultrapassou a faixa "Moderada" conforme a CONAMA 491/2018, com data, local e classificação descritos em linguagem acessível, para embasar reportagens sem precisar interpretar dados técnicos. | 1. O sistema filtra automaticamente os registros com IQAr acima de "Moderada" (faixas Ruim, Muito Ruim ou Péssima). 2. A saída apresenta data, estação e faixa em linguagem acessível, sem siglas técnicas não explicadas (ex: "Qualidade do ar Ruim em 12/03/2024 na Estação Centro"). 3. O relatório lista os episódios em ordem cronológica. 4. Quando nenhum episódio crítico é encontrado no período, o sistema exibe mensagem informativa. |
+### Épico 01 — Módulo do Pesquisador
+
+#### HU-01.1: Upload e Validação de Arquivo CSV
+**Prioridade:** Alta
+
+> Como pesquisador, quero que o sistema valide a estrutura e os dados do arquivo CSV carregado, para garantir que apenas dados íntegros sejam processados.
+
+**Critérios de Aceitação:**
+- O sistema deve aceitar arquivos obrigatoriamente com a extensão `.csv`.
+- O sistema deve validar a presença das cinco colunas obrigatórias no cabeçalho: `data`, `estacao`, `poluente`, `concentracao` e `unidade`.
+- O formato da coluna `data` deve ser validado estritamente como `YYYY-MM-DD`.
+- A coluna `concentracao` deve aceitar apenas valores numéricos decimais (`float`) positivos.
+- Linhas com campos nulos/vazios, tipos de dados incompatíveis ou colunas ausentes devem ser puladas/ignoradas.
+- Para cada linha ignorada, o sistema deve imprimir um log/aviso no terminal indicando o número da linha e a falha de validação encontrada.
+
+---
+
+#### HU-01.2: Cálculo do IQAr por Poluente Individual
+**Prioridade:** Alta
+
+> Como pesquisador, quero que o sistema aplique as fórmulas e os intervalos de transição (*breakpoints*) da resolução CONAMA 491/2018 para cada poluente, para obter o índice individual correto.
+
+**Critérios de Aceitação:**
+- O sistema deve calcular o IQAr utilizando a fórmula de interpolação linear correspondente a cada faixa de concentração da CONAMA 491/2018.
+- O sistema deve mapear e aceitar os parâmetros de cálculo para os principais poluentes previstos na norma (MP10, MP2,5, O₃, CO, NO₂, SO₂).
+- Cada cálculo individual deve retornar o valor numérico inteiro do IQAr e sua respectiva classificação de faixa.
+
+---
+
+#### HU-01.3: Consolidação do Índice Geral Diário por Estação
+**Prioridade:** Alta
+
+> Como pesquisador, quero que o sistema identifique o pior índice entre os poluentes de uma mesma estação e data, para definir o índice geral do dia conforme as diretrizes regulatórias.
+
+**Critérios de Aceitação:**
+- O sistema deve agrupar as medições processadas combinando as chaves `data` e `estacao`.
+- Para cada agrupamento diário por estação, o sistema deve comparar os valores de IQAr calculados para todos os poluentes daquela combinação.
+- O índice geral do dia para a estação deve ser definido, obrigatoriamente, pelo maior (pior) valor de IQAr identificado entre eles.
+
+---
+
+#### HU-01.4: Apresentação do Relatório Técnico de IQAr
+**Prioridade:** Alta
+
+> Como pesquisador, quero visualizar os resultados detalhados dos cálculos formatados na tela, para analisar o comportamento de cada poluente de forma ágil e centralizada.
+
+**Critérios de Aceitação:**
+- O sistema deve exibir os dados calculados estruturados em formato de tabela textual ou listagem limpa no terminal.
+- Cada registro de saída deve exibir explicitamente: Poluente, Concentração informada, Unidade, IQAr calculado e Classificação da faixa (Boa, Moderada, Ruim, Muito Ruim ou Péssima).
+- O sistema deve sinalizar visualmente (ou em coluna própria) qual poluente determinou o Índice Geral Diário do respectivo dia/estação.
+
+---
+
+### Épico 02 — Módulo do Jornalista
+
+#### HU-02.1: Filtragem de Dias Críticos da Qualidade do Ar
+**Prioridade:** Média
+
+> Como jornalista, quero que o sistema filtre os dados gerados para reter apenas os registros que violaram o nível considerado aceitável, para focar minha apuração nos casos de maior interesse público.
+
+**Critérios de Aceitação:**
+- O sistema deve ler o Índice Geral Diário consolidado na HU-01.3.
+- O sistema deve isolar e reter exclusivamente os registros cujas faixas classificadas sejam: "Ruim", "Muito Ruim" ou "Péssima".
+- Registros com faixas consideradas seguras ("Boa" ou "Moderada") devem ser completamente removidos desta visualização.
+
+---
+
+#### HU-02.2: Geração de Relatório em Linguagem Acessível
+**Prioridade:** Média
+
+> Como jornalista, quero que os episódios críticos sejam traduzidos em descrições textuais diretas e sem siglas técnicas, para que eu consiga utilizá-los imediatamente em rascunhos de notícias.
+
+**Critérios de Aceitação:**
+- O sistema deve traduzir as linhas brutas filtradas em sentenças de linguagem natural legíveis por leigos.
+- O padrão da saída de texto deve seguir obrigatoriamente a máscara: `"Qualidade do ar [Faixa] em [Data formatada em DD/MM/AAAA] na [Estação]"` (Exemplo: *Qualidade do ar Ruim em 12/03/2024 na Estação Centro*).
+- A saída voltada para o jornalista não deve exibir siglas como "IQAr" ou valores numéricos complexos de concentração (ex: µg/m³).
+
+---
+
+#### HU-02.3: Ordenação Cronológica e Mensagem de Ausência de Eventos
+**Prioridade:** Baixa/Média
+
+> Como jornalista, quero visualizar as ocorrências graves em ordem cronológica e ser informado caso o ar esteja limpo, para estruturar a linha do tempo da reportagem de forma correta.
+
+**Critérios de Aceitação:**
+- A lista de frases estruturada na HU-02.2 deve ser exibida em ordem ascendente pela data (da ocorrência mais antiga para a mais recente).
+- Se o arquivo enviado não contiver nenhum registro com faixas "Ruim", "Muito Ruim" ou "Péssima", o sistema deve exibir a mensagem padrão: `"Nenhum episódio crítico de poluição do ar foi encontrado no período analisado."`
 
 ---
 
@@ -64,14 +147,15 @@ A norma definiu **o que calcular**. Os similares confirmaram **como estruturar a
 
 ### Ambiguidades resolvidas
 
-- **Formato do CSV:** definido pelos critérios da HU-01 — colunas obrigatórias são `data`, `estacao`, `poluente`, `concentracao` e `unidade`. Linhas inválidas são descartadas com aviso.
-- **Formato da saída ("relatório"):** definido por HU — HU-01 recebe saída técnica no terminal; HU-02 recebe listagem em linguagem acessível no terminal. Nenhuma das duas gera arquivo externo no escopo atual.
+- **Formato do CSV:** definido por HU-01.1 — colunas obrigatórias são `data`, `estacao`, `poluente`, `concentracao` e `unidade`; `data` estritamente em `YYYY-MM-DD`; `concentracao` float positivo. Linhas inválidas são descartadas com aviso indicando número da linha e motivo da rejeição.
+- **Formato da saída:** definido por HU-01.4 e HU-02.2 — ambos os modos exibem no terminal, sem geração de arquivo externo no escopo atual. O modo pesquisador usa listagem técnica; o modo jornalista usa a máscara `"Qualidade do ar [Faixa] em [DD/MM/AAAA] na [Estação]"` sem siglas ou valores numéricos de concentração.
+- **Índice geral diário:** definido por HU-01.3 — agrupamento por `data` + `estacao`; índice geral é obrigatoriamente o pior IQAr entre os poluentes daquele agrupamento.
+- **Mensagem de ausência de eventos críticos:** definido por HU-02.3 — texto padrão fixo: `"Nenhum episódio crítico de poluição do ar foi encontrado no período analisado."`
 
 ### Conflitos identificados
 
-- HU-01 e HU-02 compartilham a mesma entrada CSV e o mesmo processamento de cálculo. O que muda é exclusivamente o formato da saída. Isso será tratado na arquitetura via padrão Strategy no módulo de relatórios.
+- Épico 01 e Épico 02 compartilham a mesma entrada CSV e o mesmo processamento de cálculo (HU-01.1 a HU-01.3). O que muda é exclusivamente o formato da saída. Tratado na arquitetura via padrão Strategy no módulo de relatórios (`ResearcherReport` / `JournalistReport`).
 
 ### Questões em aberto
 
-- O sistema processará múltiplos poluentes simultaneamente em um único CSV ou apenas um por vez? (A ser definido na Sprint 2 com base na implementação do calculador.)
-- O período de análise será fixo (ex: todos os dados do CSV) ou configurável pelo usuário via parâmetro de linha de comando?
+- O período de análise será fixo (todos os dados do CSV) ou configurável pelo usuário via argumento de linha de comando? (A ser definido na Sprint 3.)
