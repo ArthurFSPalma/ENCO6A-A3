@@ -68,7 +68,7 @@ graph TD
 
 | Componente | Responsabilidade |
 |---|---|
-| `main.py` | Orquestra o pipeline; recebe argumentos da linha de comando; instancia o Strategy correto de relatório. |
+| `main.py` | Orquestra o pipeline; recebe argumentos da linha de comando; instancia o relatório correto (subclasse de `Report`) conforme o modo. |
 | `reader.py` | Lê e valida o CSV; descarta linhas inválidas com aviso; retorna lista de `Medicao`. |
 | `calculator.py` | Aplica as fórmulas e breakpoints da CONAMA 491/2018 por poluente; retorna IQAr e faixa. |
 | `reporter.py` | Formata e exibe os resultados conforme o público-alvo (pesquisador ou jornalista). |
@@ -91,7 +91,7 @@ graph TD
 
 **Problema resolvido:** cada poluente tem breakpoints e unidades distintas, mas o fluxo de cálculo (interpolação linear + classificação) é idêntico. Sem o padrão, o código seria um bloco `if/elif` por poluente impossível de estender sem modificar código existente.
 
-**Solução:** `PollutantCalculator` define a interface e a fórmula compartilhada. Cada subclasse declara apenas seus breakpoints e nome.
+**Solução:** `PollutantCalculator` define a interface e a fórmula compartilhada. Cada subclasse declara apenas seus breakpoints e nome. `main.py` seleciona a calculadora certa pela chave do poluente, via o registro `CALCULADORAS` definido em `calculator.py`.
 
 ```mermaid
 classDiagram
@@ -112,50 +112,56 @@ classDiagram
         +nome() str
     }
 
-    class main {
+    class calculator {
+        <<module>>
         +CALCULADORAS: dict
     }
 
     PollutantCalculator <|-- PM25Calculator
     PollutantCalculator <|-- PM10Calculator
-    main --> PollutantCalculator : usa via CALCULADORAS
+    calculator ..> PollutantCalculator : registra instâncias
+    main ..> calculator : importa CALCULADORAS
 ```
 
-**Como adicionar um novo poluente (ex: O₃):** criar `O3Calculator(PollutantCalculator)` com seus breakpoints e registrá-lo em `CALCULADORAS`. Nenhuma outra classe é modificada — Open/Closed Principle.
+**Como adicionar um novo poluente (ex: O₃):** criar `O3Calculator(PollutantCalculator)` com seus breakpoints e registrá-lo em `CALCULADORAS` (em `calculator.py`). Nenhuma outra classe é modificada — Open/Closed Principle.
 
 ---
 
-### Padrão 2 — Strategy em `reporter.py`
+### Padrão 2 — Template Method em `reporter.py`
 
-**Problema resolvido:** HU-01 (pesquisador) e HU-02 (jornalista) compartilham a mesma entrada de dados, mas exigem formatos de saída completamente diferentes. Embutir os dois formatos em uma única função com `if modo == "pesquisador"` mistura responsabilidades e dificulta a adição de novos formatos.
+**Problema resolvido:** HU-01 (pesquisador) e HU-02 (jornalista) produzem relatórios com a **mesma estrutura geral** (cabeçalho com separadores e título, corpo, rodapé), mas com conteúdo diferente em cada parte. Sem o padrão, cada relatório repetiria a montagem do esqueleto (separadores, ordem dos blocos, junção com `\n`), gerando duplicação e risco de os dois formatos divergirem na estrutura.
 
-**Solução:** `ReportStrategy` define a interface `gerar(resultados)`. `ResearcherReport` e `JournalistReport` implementam formatos independentes. `main.py` instancia o Strategy correto com base no argumento do usuário.
+**Solução:** a classe-base `Report` define o **template method** `gerar()`, que fixa a ordem dos passos (cabeçalho → corpo → rodapé) e os une com `\n`. As subclasses implementam apenas os passos que variam: `_titulo()` e `_corpo()` (passos abstratos, obrigatórios) e, opcionalmente, o **hook** `_rodape()` — que por padrão apenas fecha com o separador. `ResearcherReport` sobrescreve `_rodape()` para acrescentar o índice geral; `JournalistReport` usa o comportamento padrão.
 
 ```mermaid
 classDiagram
-    class ReportStrategy {
+    class Report {
         <<abstract>>
-        +gerar(resultados: list)* str
+        +gerar(resultados: list) str
+        +_titulo()* str
+        +_corpo(resultados: list)* str
+        +_rodape(resultados: list) str
     }
 
     class ResearcherReport {
-        +gerar(resultados: list) str
+        +_titulo() str
+        +_corpo(resultados: list) str
+        +_rodape(resultados: list) str
     }
 
     class JournalistReport {
-        +gerar(resultados: list) str
+        +_titulo() str
+        +_corpo(resultados: list) str
     }
 
-    class main {
-        +processar(caminho, modo)
-    }
-
-    ReportStrategy <|-- ResearcherReport
-    ReportStrategy <|-- JournalistReport
-    main --> ReportStrategy : instancia conforme modo
+    Report <|-- ResearcherReport
+    Report <|-- JournalistReport
+    main ..> Report : instancia conforme o modo
 ```
 
-**Como adicionar um novo formato (ex: CSV de saída):** criar `CSVReport(ReportStrategy)` e registrá-lo em `main.py`. Nenhum relatório existente é modificado.
+**Por que Template Method (e não Strategy):** aqui o que varia são os **passos** de um algoritmo de montagem fixo, não o algoritmo inteiro. A classe-base controla o fluxo e chama os passos das subclasses — inversão de controle ("não me chame, eu te chamo"). Para este caso, herança com passos sobrescritos é mais direta do que plugar objetos de estratégia. (O domínio é distinto do Padrão 1: lá variam os dados/algoritmo de cálculo por poluente; aqui varia o conteúdo de um relatório de estrutura fixa.)
+
+**Como adicionar um novo formato (ex: relatório resumido):** criar `SummaryReport(Report)` implementando `_titulo()` e `_corpo()` (e o hook `_rodape()`, se precisar). `gerar()` e a estrutura geral não mudam — Open/Closed Principle.
 
 ---
 
