@@ -1,61 +1,125 @@
 """
-reader.py — Camada de entrada.
-Responsabilidade: ler e validar o CSV de medições de qualidade do ar.
+reporter.py — Camada de saída.
+Responsabilidade: formatar e exibir os resultados calculados.
+
+Padrão de projeto: Template Method.
+Report define o esqueleto fixo do relatório em gerar() (cabeçalho, corpo e
+rodapé, unidos com quebras de linha). As subclasses ResearcherReport e
+JournalistReport implementam apenas os passos que variam por público
+(HU-01 e HU-02).
 """
 
-import csv
+from abc import ABC, abstractmethod
 from dataclasses import dataclass
 
-COLUNAS_OBRIGATORIAS = {"data", "estacao", "poluente", "concentracao", "unidade"}
+FAIXAS_CRITICAS = {"Ruim", "Muito Ruim", "Péssima"}
+SEPARADOR = "=" * 62
 
 
 @dataclass
-class Medicao:
-    """Representa uma linha válida do CSV de entrada."""
+class Resultado:
+    """Representa o resultado do cálculo de IQAr para uma medição."""
     data: str
     estacao: str
     poluente: str
     concentracao: float
     unidade: str
+    iqar: float
+    faixa: str
 
 
-def ler_csv(caminho: str) -> list[Medicao]:
+class Report(ABC):
     """
-    Lê e valida o CSV de entrada conforme o contrato definido em HU-01.
+    Classe-base do padrão Template Method para geração de relatórios.
 
-    Args:
-        caminho: Caminho para o arquivo CSV.
-
-    Returns:
-        Lista de Medicao com as linhas válidas.
-
-    Raises:
-        ValueError: Se colunas obrigatórias estiverem ausentes no cabeçalho.
-        FileNotFoundError: Se o arquivo não for encontrado.
+    gerar() é o template method: fixa a ordem dos passos
+    (cabeçalho -> corpo -> rodapé) e não deve ser sobrescrito. As subclasses
+    implementam os passos abstratos (_titulo, _corpo) e podem opcionalmente
+    sobrescrever o hook _rodape.
     """
-    medicoes = []
 
-    with open(caminho, newline="", encoding="utf-8") as f:
-        reader = csv.DictReader(f)
+    def gerar(self, resultados: list[Resultado]) -> str:
+        """
+        Template method: monta o relatório na ordem fixa e o retorna pronto.
 
-        colunas_presentes = set(reader.fieldnames or [])
-        faltando = COLUNAS_OBRIGATORIAS - colunas_presentes
-        if faltando:
-            raise ValueError(f"CSV inválido — colunas ausentes: {faltando}")
+        Args:
+            resultados: Lista de Resultado com IQAr e faixa já calculados.
 
-        for numero_linha, linha in enumerate(reader, start=2):
-            try:
-                concentracao = float(linha["concentracao"])
-                if concentracao < 0:
-                    raise ValueError("Concentração negativa.")
-                medicoes.append(Medicao(
-                    data=linha["data"].strip(),
-                    estacao=linha["estacao"].strip(),
-                    poluente=linha["poluente"].strip(),
-                    concentracao=concentracao,
-                    unidade=linha["unidade"].strip(),
-                ))
-            except (ValueError, KeyError):
-                print(f"[AVISO] Linha {numero_linha} ignorada: dados inválidos.")
+        Returns:
+            String formatada pronta para exibição no terminal.
+        """
+        linhas = [SEPARADOR, self._titulo(), SEPARADOR]
+        linhas += self._corpo(resultados)
+        linhas += self._rodape(resultados)
+        return "\n".join(linhas)
 
-    return medicoes
+    @abstractmethod
+    def _titulo(self) -> str:
+        """Passo: retorna o título do relatório."""
+
+    @abstractmethod
+    def _corpo(self, resultados: list[Resultado]) -> list[str]:
+        """Passo: retorna as linhas do corpo do relatório."""
+
+    def _rodape(self, resultados: list[Resultado]) -> list[str]:
+        """Hook: rodapé do relatório. Por padrão, apenas fecha com o separador."""
+        return [SEPARADOR]
+
+
+class ResearcherReport(Report):
+    """
+    Relatório técnico para pesquisadores e órgãos ambientais (HU-01).
+    Exibe todos os registros com IQAr, faixa e índice geral do período.
+    """
+
+    def _titulo(self) -> str:
+        return "  RELATÓRIO TÉCNICO — IQAr (CONAMA 491/2018)"
+
+    def _corpo(self, resultados: list[Resultado]) -> list[str]:
+        if not resultados:
+            return ["  Nenhum dado válido para exibir."]
+
+        return [
+            f"  {r.data} | {r.estacao:<12} | {r.poluente:<6} | "
+            f"Conc.: {r.concentracao:>7.2f} {r.unidade:<6} | "
+            f"IQAr: {r.iqar:>6.1f} | {r.faixa}"
+            for r in resultados
+        ]
+
+    def _rodape(self, resultados: list[Resultado]) -> list[str]:
+        if not resultados:
+            return [SEPARADOR]
+
+        pior = max(resultados, key=lambda r: r.iqar)
+        return [
+            "-" * 62,
+            f"  Índice Geral: {pior.iqar} ({pior.faixa})"
+            f" — Poluente crítico: {pior.poluente}",
+            SEPARADOR,
+        ]
+
+
+class JournalistReport(Report):
+    """
+    Relatório acessível para jornalistas (HU-02).
+    Lista apenas episódios com IQAr acima de Moderada, em linguagem simples.
+    """
+
+    def _titulo(self) -> str:
+        return "  EPISÓDIOS CRÍTICOS DE QUALIDADE DO AR"
+
+    def _corpo(self, resultados: list[Resultado]) -> list[str]:
+        criticos = sorted(
+            [r for r in resultados if r.faixa in FAIXAS_CRITICAS],
+            key=lambda r: r.data,
+        )
+
+        if not criticos:
+            return ["  Nenhum episódio crítico encontrado no período analisado."]
+
+        return [
+            f"  Qualidade do ar {r.faixa} em {r.data} "
+            f"na estação {r.estacao} "
+            f"(poluente monitorado: {r.poluente})."
+            for r in criticos
+        ]
