@@ -27,11 +27,20 @@ O Brasil contabilizou 570 estações de monitoramento da qualidade do ar em 2024
 - A CONAMA 491/2018 é o padrão legal brasileiro vigente para cálculo do IQAr, mas sua aplicação manual é propensa a erro e não escalável.
 - Dados de estações como CETESB (SP) e IAT (PR) já são exportados em CSV — o formato de entrada do sistema existe e é real.
 
+### Base de dados utilizada no protótipo
+
+O protótipo é validado sobre dados **reais e públicos**: a série histórica do estado do **Paraná referente a 2020**, publicada em formato aberto pelo **IEMA — Instituto de Energia e Meio Ambiente**, que consolida e disponibiliza os dados das redes estaduais de monitoramento. O ano de 2020 está sob vigência da **Resolução CONAMA 491/2018**, garantindo coerência entre o dado e a norma aplicada no cálculo.
+
+O conjunto cobre **8 estações de monitoramento** e cinco dos seis poluentes da norma — **MP10, O₃, CO, NO₂ e SO₂** (essa rede não monitora MP2,5; ainda assim, o sistema suporta o cálculo dos seis poluentes previstos na CONAMA 491/2018). Os dados brutos vêm em **frequência horária**, com os gases expressos em **ppb** e o monóxido de carbono em **ppm**.
+
+Como esse formato bruto não corresponde ao contrato de entrada do sistema, a preparação fica a cargo de um **utilitário separado** (`conversor.py`): ele agrega as medições horárias em **médias diárias**, converte os gases de ppb para **µg/m³** e padroniza a saída nas cinco colunas do contrato (`data`, `estacao`, `poluente`, `concentracao`, `unidade`). Dessa forma, o sistema permanece **desacoplado da fonte** — ele lê apenas o contrato, e a origem específica do dado é responsabilidade do conversor.
+
 ### Fontes
 
 - MMA — Relatório Anual de Acompanhamento da Qualidade do Ar 2025
 - Resolução CONAMA 491/2018
 - SOUSA, H. C. L.; TSAI, D. S.; DINIZ, I. N. Uso de dados abertos para avançar na avaliação da qualidade do ar. *Revista Brasileira de Avaliação*, v. 13, n. 2spe, e133124, 2024. Instituto de Energia e Meio Ambiente (IEMA).
+- IEMA — Instituto de Energia e Meio Ambiente. Plataforma de dados abertos de qualidade do ar (série do Paraná, 2020). Disponível em: https://energiaeambiente.org.br/qualidadedoar
 
 ---
 
@@ -154,8 +163,8 @@ A norma definiu **o que calcular**. Os similares confirmaram **como estruturar a
 
 ### Conflitos identificados
 
-- Épico 01 e Épico 02 compartilham a mesma entrada CSV e o mesmo processamento de cálculo (HU-01.1 a HU-01.3). O que muda é exclusivamente o formato da saída. Tratado na arquitetura via padrão Strategy no módulo de relatórios (`ResearcherReport` / `JournalistReport`).
+- Épico 01 e Épico 02 compartilham a mesma entrada CSV e o mesmo processamento de cálculo (HU-01.1 a HU-01.3). O que muda é exclusivamente o formato da saída. Tratado na arquitetura via padrão Template Method no módulo de relatórios (`ResearcherReport` / `JournalistReport`).
 
 ### Questões em aberto
 
-- O período de análise será fixo (todos os dados do CSV) ou configurável pelo usuário via argumento de linha de comando? (A ser definido na Sprint 3.)
+- **[Resolvido na Sprint 3]** O período de análise é **fixo**: o sistema processa todos os registros do CSV de entrada, sem recorte por intervalo de datas.
