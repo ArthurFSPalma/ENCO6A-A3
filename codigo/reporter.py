@@ -1,110 +1,130 @@
 """
 reporter.py — Camada de saída.
-Responsabilidade: formatar e exibir os resultados calculados.
+Responsabilidade: formatar e exibir os relatórios a partir do índice diário
+consolidado (IndiceDiario).
 
-Padrão de projeto: Strategy.
-ReportStrategy é a interface; ResearcherReport e JournalistReport
-implementam formatos distintos para os públicos de HU-01 e HU-02.
+Padrão de projeto: Template Method.
+Report define o esqueleto fixo do relatório em gerar() (cabeçalho, corpo e
+rodapé, unidos por quebras de linha) e não deve ser sobrescrito. As
+subclasses ResearcherReport (HU-01.4) e JournalistReport (HU-02.2 e HU-02.3)
+implementam apenas os passos que variam por público.
 """
 
 from abc import ABC, abstractmethod
-from dataclasses import dataclass
 
-FAIXAS_CRITICAS = {"Ruim", "Muito Ruim", "Péssima"}
-SEPARADOR = "=" * 62
+from consolidador import IndiceDiario
 
-
-@dataclass
-class Resultado:
-    """Representa o resultado do cálculo de IQAr para uma medição."""
-    data: str
-    estacao: str
-    poluente: str
-    concentracao: float
-    unidade: str
-    iqar: float
-    faixa: str
+SEPARADOR: str = "=" * 62
+SUBSEPARADOR: str = "-" * 62
+MENSAGEM_SEM_CRITICOS: str = (
+    "Nenhum episódio crítico de poluição do ar foi encontrado "
+    "no período analisado."
+)
 
 
-class ReportStrategy(ABC):
-    """Interface Strategy para geração de relatórios."""
+def _para_data_br(data_iso: str) -> str:
+    """Converte uma data 'YYYY-MM-DD' para 'DD/MM/AAAA'."""
+    ano, mes, dia = data_iso.split("-")
+    return f"{dia}/{mes}/{ano}"
 
-    @abstractmethod
-    def gerar(self, resultados: list[Resultado]) -> str:
+
+class Report(ABC):
+    """
+    Classe-base do padrão Template Method para geração de relatórios.
+
+    gerar() é o template method: fixa a ordem dos passos
+    (cabeçalho -> corpo -> rodapé) e não deve ser sobrescrito. As subclasses
+    implementam os passos abstratos (_titulo, _corpo) e podem sobrescrever o
+    hook _rodape.
+    """
+
+    def gerar(self, indices: list[IndiceDiario]) -> str:
         """
-        Gera o relatório a partir dos resultados calculados.
+        Template method: monta o relatório na ordem fixa e o retorna pronto.
 
         Args:
-            resultados: Lista de Resultado com IQAr e faixa já calculados.
+            indices: Índices diários consolidados a serem exibidos. O que
+                cada relatório recebe é decidido na orquestração (main): o
+                relatório do pesquisador recebe todos; o do jornalista
+                recebe apenas os dias críticos (HU-02.1).
 
         Returns:
             String formatada pronta para exibição no terminal.
         """
-
-
-class ResearcherReport(ReportStrategy):
-    """
-    Relatório técnico para pesquisadores e órgãos ambientais (HU-01).
-    Exibe todos os registros com IQAr, faixa e índice geral do período.
-    """
-
-    def gerar(self, resultados: list[Resultado]) -> str:
-        linhas = [
-            SEPARADOR,
-            "  RELATÓRIO TÉCNICO — IQAr (CONAMA 491/2018)",
-            SEPARADOR,
-        ]
-
-        if not resultados:
-            linhas.append("  Nenhum dado válido para exibir.")
-        else:
-            for r in resultados:
-                linhas.append(
-                    f"  {r.data} | {r.estacao:<12} | {r.poluente:<6} | "
-                    f"Conc.: {r.concentracao:>7.2f} {r.unidade:<6} | "
-                    f"IQAr: {r.iqar:>6.1f} | {r.faixa}"
-                )
-
-            pior = max(resultados, key=lambda r: r.iqar)
-            linhas.append("-" * 62)
-            linhas.append(
-                f"  Índice Geral: {pior.iqar} ({pior.faixa})"
-                f" — Poluente crítico: {pior.poluente}"
-            )
-
-        linhas.append(SEPARADOR)
+        linhas = [SEPARADOR, self._titulo(), SEPARADOR]
+        linhas += self._corpo(indices)
+        linhas += self._rodape(indices)
         return "\n".join(linhas)
 
+    @abstractmethod
+    def _titulo(self) -> str:
+        """Passo: retorna o título do relatório."""
 
-class JournalistReport(ReportStrategy):
+    @abstractmethod
+    def _corpo(self, indices: list[IndiceDiario]) -> list[str]:
+        """Passo: retorna as linhas do corpo do relatório."""
+
+    def _rodape(self, indices: list[IndiceDiario]) -> list[str]:
+        """Hook: rodapé. Por padrão, apenas fecha com o separador."""
+        return [SEPARADOR]
+
+
+class ResearcherReport(Report):
     """
-    Relatório acessível para jornalistas (HU-02).
-    Lista apenas episódios com IQAr acima de Moderada, em linguagem simples.
+    Relatório técnico para pesquisadores e órgãos ambientais (HU-01.4).
+
+    Para cada data/estação, lista todos os poluentes medidos com
+    concentração, unidade, IQAr e faixa, e sinaliza o poluente crítico que
+    determinou o índice geral do dia.
     """
 
-    def gerar(self, resultados: list[Resultado]) -> str:
-        criticos = sorted(
-            [r for r in resultados if r.faixa in FAIXAS_CRITICAS],
-            key=lambda r: r.data,
-        )
+    def _titulo(self) -> str:
+        return "  RELATÓRIO TÉCNICO — IQAr (CONAMA 491/2018)"
 
-        linhas = [
-            SEPARADOR,
-            "  EPISÓDIOS CRÍTICOS DE QUALIDADE DO AR",
-            SEPARADOR,
-        ]
+    def _corpo(self, indices: list[IndiceDiario]) -> list[str]:
+        if not indices:
+            return ["  Nenhum dado válido para exibir."]
 
-        if not criticos:
-            linhas.append(
-                "  Nenhum episódio crítico encontrado no período analisado."
-            )
-        else:
-            for r in criticos:
+        linhas: list[str] = []
+        for indice in indices:
+            linhas.append(f"  {indice.data} | Estação: {indice.estacao}")
+            for resultado in sorted(indice.resultados, key=lambda r: r.poluente):
+                critico = resultado.poluente == indice.poluente_critico
+                marca = "  <<< POLUENTE CRÍTICO" if critico else ""
                 linhas.append(
-                    f"  Qualidade do ar {r.faixa} em {r.data} "
-                    f"na estação {r.estacao} "
-                    f"(poluente monitorado: {r.poluente})."
+                    f"    {resultado.poluente:<6} | "
+                    f"Conc.: {resultado.concentracao:>8.2f} {resultado.unidade:<6} | "
+                    f"IQAr: {resultado.iqar:>3d} | {resultado.faixa}{marca}"
                 )
+            linhas.append(
+                f"    -> Índice geral do dia: "
+                f"{indice.iqar_geral} ({indice.faixa_geral})"
+                f" | Poluente crítico: {indice.poluente_critico}"
+            )
+            linhas.append("")  # linha em branco entre blocos
+        return linhas
 
-        linhas.append(SEPARADOR)
-        return "\n".join(linhas)
+
+class JournalistReport(Report):
+    """
+    Relatório acessível para jornalistas (HU-02.2 e HU-02.3).
+
+    Exibe os episódios críticos recebidos em linguagem leiga, em ordem
+    cronológica, na máscara:
+        "Qualidade do ar [Faixa] em [DD/MM/AAAA] na [Estação]"
+    Se não houver episódios, exibe a mensagem padrão do período sem críticos.
+    """
+
+    def _titulo(self) -> str:
+        return "  EPISÓDIOS CRÍTICOS DE QUALIDADE DO AR"
+
+    def _corpo(self, indices: list[IndiceDiario]) -> list[str]:
+        if not indices:
+            return [f"  {MENSAGEM_SEM_CRITICOS}"]
+
+        criticos = sorted(indices, key=lambda indice: (indice.data, indice.estacao))
+        return [
+            f"  Qualidade do ar {indice.faixa_geral} em "
+            f"{_para_data_br(indice.data)} na {indice.estacao}"
+            for indice in criticos
+        ]
