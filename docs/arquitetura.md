@@ -1,203 +1,196 @@
-# Arquitetura — Sistema Analisador de Qualidade do Ar
+# Arquitetura — Analisador de Qualidade do Ar
 
-**Sprint 2 · Projeto da Aplicação**
-
-**Membros:**
-- Arthur Francisco da Silva Palma — 2369060
-- Luiz Fernando Rolim Vieira — 2419939
+> Sistema em Python que lê medições de poluentes de um arquivo CSV, calcula o **Índice de Qualidade do Ar (IQAr)** segundo a **Resolução CONAMA 491/2018** e gera relatórios no terminal para dois públicos: **pesquisadores** e **jornalistas**.
 
 ---
 
-## 1. Padrões de Codificação e Gestão de Qualidade
+## 1. Visão geral
 
-### Estilo de código
-- **PEP 8**: indentação com 4 espaços, linhas de até 100 caracteres, nomes em `snake_case` para variáveis e funções, `PascalCase` para classes.
-- **Type hints**: todas as funções públicas anotadas com tipos (`-> str`, `list[Resultado]`, etc.).
-- **Docstrings**: toda função pública documentada com descrição, `Args:` e `Returns:`.
-- **Sem valores mágicos**: constantes nomeadas em maiúsculas (`FAIXAS_CRITICAS`, `SEPARADOR`, `COLUNAS_OBRIGATORIAS`).
+A aplicação é organizada em **camadas de responsabilidade única**, conectadas por um **orquestrador** (`main.py`). O dado entra por um **contrato fixo** (CSV de cinco colunas), é validado, processado em duas etapas — cálculo do IQAr por poluente e consolidação do índice diário por estação — e por fim formatado na saída.
 
-### Gestão do repositório
-- Commits realizados a cada aula de desenvolvimento e antes de cada review.
-- Mensagens de commit descritivas em português (ex: `Adiciona PM10Calculator com breakpoints CONAMA 491`).
-- Estrutura de pastas conforme especificação do professor:
+Dois padrões de projeto estruturam os pontos onde o sistema varia. Na camada de processamento, o **Strategy** (`calculator.py`) trata cada poluente como uma estratégia de cálculo com seus próprios limites de faixa (*breakpoints*), enquanto a fórmula de interpolação permanece única e compartilhada. Na camada de saída, o **Template Method** (`reporter.py`) fixa o esqueleto do relatório e deixa que cada público implemente apenas os passos que mudam.
 
-```
-codigo/
-  main.py
-  reader.py
-  calculator.py
-  reporter.py
-  sample_data.csv
-  tests/
-    test_calculator.py
-    test_reporter.py
-docs/
-  requisitos.md
-  arquitetura.md
-```
-
-### Qualidade
-- Nenhum `import *`; todos os imports são explícitos.
-- Tratamento de erro em todas as entradas externas (CSV, argumentos de linha de comando).
-- Avisos ao usuário para linhas inválidas sem interromper o processamento.
+A preparação dos dados reais fica a cargo de um **utilitário separado** (`conversor.py`), que **não faz parte do sistema**: ele apenas transforma o dado bruto da fonte no contrato que o sistema consome, e roda uma única vez, fora do fluxo de execução.
 
 ---
 
-## 2. Diagrama de Arquitetura
-
-O sistema segue uma **arquitetura em camadas (Layered Architecture)** com três camadas de responsabilidade única, orquestradas pelo `main.py`.
+## 2. Diagrama de arquitetura
 
 ```mermaid
-graph TD
-    Usuario["Usuário\n(terminal)"]
-    Main["main.py\nOrquestrador"]
-    Reader["reader.py\nCamada de Entrada"]
-    Calculator["calculator.py\nCamada de Processamento"]
-    Reporter["reporter.py\nCamada de Saída"]
-    CSV["arquivo.csv"]
+flowchart TB
+    subgraph PREP["Pré-processamento · offline, fora do sistema"]
+        direction LR
+        RAW[("PR2020.csv<br/>bruto IEMA-PR · horário")]
+        CONV["conversor.py<br/>utilitário de preparação"]
+        RAW -->|"agrega p/ diário<br/>ppb → µg/m³"| CONV
+    end
 
-    Usuario -->|"python main.py arquivo.csv modo"| Main
-    Main --> Reader
-    Main --> Calculator
-    Main --> Reporter
-    CSV --> Reader
-    Reporter -->|"relatório no terminal"| Usuario
+    CSV[("sample_data.csv<br/>contrato · 5 colunas")]
+    CONV --> CSV
+
+    subgraph SYS["Sistema · Analisador de Qualidade do Ar"]
+        direction TB
+        MAIN["main.py — Orquestração<br/>menu interativo no terminal"]
+        READER["reader.py — Entrada<br/>leitura + validação · HU-01.1"]
+        subgraph PROC["Processamento"]
+            direction LR
+            CONS["consolidador.py<br/>índice diário + filtro<br/>HU-01.3 / HU-02.1"]
+            CALC["calculator.py<br/>IQAr por poluente · Strategy<br/>HU-01.2"]
+        end
+        REP["reporter.py — Saída<br/>relatórios · Template Method<br/>HU-01.4 / 02.2 / 02.3"]
+        TERM["Terminal<br/>relatório pesquisador / jornalista"]
+
+        MAIN -->|"1 · caminho do CSV"| READER
+        READER -->|"2 · lista de Medicao"| CONS
+        CONS -.->|"usa por poluente"| CALC
+        CONS -->|"3 · lista de IndiceDiario"| REP
+        REP -->|"4 · texto formatado"| TERM
+    end
+
+    CSV ==>|"lê o contrato"| READER
+
+    classDef dados fill:#eef2ff,stroke:#6366f1,color:#1e1b4b;
+    classDef orq  fill:#fef9c3,stroke:#ca8a04,color:#422006;
+    classDef ent  fill:#dcfce7,stroke:#16a34a,color:#052e16;
+    classDef proc fill:#dbeafe,stroke:#2563eb,color:#172554;
+    classDef sai  fill:#fae8ff,stroke:#c026d3,color:#4a044e;
+    classDef util fill:#f1f5f9,stroke:#64748b,color:#0f172a;
+    classDef term fill:#ffffff,stroke:#475569,color:#0f172a;
+
+    class RAW,CSV dados
+    class CONV util
+    class MAIN orq
+    class READER ent
+    class CONS,CALC proc
+    class REP sai
+    class TERM term
 ```
 
-### Responsabilidades por componente
-
-| Componente | Responsabilidade |
-|---|---|
-| `main.py` | Orquestra o pipeline; recebe argumentos da linha de comando; instancia o relatório correto (subclasse de `Report`) conforme o modo. |
-| `reader.py` | Lê e valida o CSV; descarta linhas inválidas com aviso; retorna lista de `Medicao`. |
-| `calculator.py` | Aplica as fórmulas e breakpoints da CONAMA 491/2018 por poluente; retorna IQAr e faixa. |
-| `reporter.py` | Formata e exibe os resultados conforme o público-alvo (pesquisador ou jornalista). |
-
-### Trade-offs justificados
-
-**Layered Architecture foi escolhida porque:**
-- Cada camada tem uma única razão para mudar (SRP): se o formato do CSV mudar, só `reader.py` é alterado; se uma fórmula mudar, só `calculator.py`.
-- Facilita os testes automatizados: cada camada pode ser testada isoladamente com dados fictícios.
-- Adequada ao escopo do projeto: pipeline linear sem necessidade de flexibilidade entre camadas em tempo de execução.
-
-**Custo aceito:**
-- Pouco flexível para mudanças de formato de entrada que afetem a interface entre camadas (ex: trocar CSV por API REST exigiria refatorar `reader.py` e ajustar `main.py`).
+As cores indicam a responsabilidade de cada peça: dados e contrato em índigo, utilitário offline em cinza, orquestração em âmbar, entrada em verde, processamento em azul e saída em magenta. A numeração de **1 a 4** mostra a ordem do fluxo em tempo de execução. A seta tracejada de `consolidador` para `calculator` representa uma **dependência de uso** (Strategy), e não um passo do pipeline.
 
 ---
 
-## 3. Padrões de Projeto
+## 3. Fluxo de execução
 
-### Padrão 1 — Strategy em `calculator.py`
+```mermaid
+sequenceDiagram
+    actor U as Usuário
+    participant M as main.py
+    participant R as reader.py
+    participant C as consolidador.py
+    participant K as calculator.py
+    participant P as reporter.py
 
-**Problema resolvido:** cada poluente tem breakpoints e unidades distintas, mas o fluxo de cálculo (interpolação linear + classificação) é idêntico. Sem o padrão, o código seria um bloco `if/elif` por poluente impossível de estender sem modificar código existente.
+    U->>M: python main.py
+    M->>U: menu (modo + arquivo)
+    U-->>M: escolhe modo e CSV
 
-**Solução:** `PollutantCalculator` define a interface e a fórmula compartilhada. Cada subclasse declara apenas seus breakpoints e nome. `main.py` seleciona a calculadora certa pela chave do poluente, via o registro `CALCULADORAS` definido em `calculator.py`.
+    M->>R: ler_csv(caminho)
+    R-->>M: lista de Medicao (linhas inválidas avisadas)
+
+    M->>C: consolidar(medicoes)
+    loop para cada (data, estação)
+        C->>K: calcular(concentracao)
+        K-->>C: (IQAr, faixa)
+    end
+    C-->>M: lista de IndiceDiario
+
+    alt modo = jornalista
+        M->>C: filtrar_criticos(indices)
+        C-->>M: apenas os dias críticos
+    end
+
+    M->>P: gerar(indices)
+    P-->>M: texto do relatório
+    M->>U: imprime no terminal
+```
+
+A leitura **descarta as linhas inválidas com aviso individual** (HU-01.1) em vez de abortar o processamento. O cálculo do IQAr acontece **dentro da consolidação**, uma vez por poluente de cada grupo (data, estação). E o **filtro de dias críticos** (HU-02.1) só é aplicado no modo jornalista — o pesquisador recebe todos os índices.
+
+---
+
+## 4. Camadas e responsabilidades
+
+A **orquestração** (`main.py`) apresenta o menu, decide o modo e coordena a passagem de dados entre as camadas. A **entrada** (`reader.py`) lê o CSV e garante o contrato, devolvendo apenas medições válidas. O **processamento** divide-se em dois módulos: `calculator.py` calcula o IQAr de um poluente isolado, e `consolidador.py` agrupa as medições por dia/estação, define o pior índice de cada grupo e expõe o filtro de dias críticos. A **saída** (`reporter.py`) formata o resultado para o público escolhido.
+
+### Mapeamento HU → módulo
+
+| HU | Módulo responsável | Responsabilidade |
+|----|--------------------|------------------|
+| HU-01.1 | `reader.py` | leitura e validação do CSV (extensão, colunas, data, concentração) |
+| HU-01.2 | `calculator.py` | cálculo do IQAr por poluente (Strategy) |
+| HU-01.3 | `consolidador.py` | índice diário consolidado por estação (pior IQAr + poluente crítico) |
+| HU-01.4 | `reporter.py` · `ResearcherReport` | relatório técnico para o pesquisador |
+| HU-02.1 | `consolidador.py` · `filtrar_criticos` | filtro dos dias críticos a partir do índice diário |
+| HU-02.2 | `reporter.py` · `JournalistReport` | relatório em linguagem leiga (máscara) |
+| HU-02.3 | `reporter.py` · `JournalistReport` | ordem cronológica e mensagem de período sem críticos |
+
+---
+
+## 5. Padrões de projeto
+
+### 5.1 Strategy — `calculator.py`
 
 ```mermaid
 classDiagram
     class PollutantCalculator {
         <<abstract>>
-        +BREAKPOINTS: list
-        +calcular(concentracao: float) tuple
-        +nome()* str
-    }
-
-    class PM25Calculator {
-        +BREAKPOINTS: list
+        +calcular(concentracao) tuple
         +nome() str
     }
-
-    class PM10Calculator {
-        +BREAKPOINTS: list
-        +nome() str
-    }
-
-    class calculator {
-        <<module>>
-        +CALCULADORAS: dict
-    }
-
-    PollutantCalculator <|-- PM25Calculator
-    PollutantCalculator <|-- PM10Calculator
-    calculator ..> PollutantCalculator : registra instâncias
-    main ..> calculator : importa CALCULADORAS
+    PollutantCalculator <|-- MP10Calculator
+    PollutantCalculator <|-- MP25Calculator
+    PollutantCalculator <|-- O3Calculator
+    PollutantCalculator <|-- COCalculator
+    PollutantCalculator <|-- NO2Calculator
+    PollutantCalculator <|-- SO2Calculator
+    note for PollutantCalculator "calcular() é compartilhado (interpolação linear da CONAMA 491). Cada subclasse define seus BREAKPOINTS e nome()."
 ```
 
-**Como adicionar um novo poluente (ex: O₃):** criar `O3Calculator(PollutantCalculator)` com seus breakpoints e registrá-lo em `CALCULADORAS` (em `calculator.py`). Nenhuma outra classe é modificada — Open/Closed Principle.
+O cálculo do IQAr difere entre os poluentes **apenas nos limites de concentração de cada faixa** (e na unidade de medida); a fórmula de interpolação linear é idêntica para todos. O Strategy isola exatamente essa variação: a classe-base `PollutantCalculator` concentra a fórmula em `calcular()`, e cada subclasse declara somente os seus `BREAKPOINTS` e o seu `nome()`. As estratégias ficam registradas no dicionário `CALCULADORAS`, cuja chave é o código do poluente no contrato. Adicionar um novo poluente passa a ser **criar uma classe e registrá-la**, sem alterar o que já funciona — o princípio aberto/fechado na prática.
 
----
-
-### Padrão 2 — Template Method em `reporter.py`
-
-**Problema resolvido:** HU-01 (pesquisador) e HU-02 (jornalista) produzem relatórios com a **mesma estrutura geral** (cabeçalho com separadores e título, corpo, rodapé), mas com conteúdo diferente em cada parte. Sem o padrão, cada relatório repetiria a montagem do esqueleto (separadores, ordem dos blocos, junção com `\n`), gerando duplicação e risco de os dois formatos divergirem na estrutura.
-
-**Solução:** a classe-base `Report` define o **template method** `gerar()`, que fixa a ordem dos passos (cabeçalho → corpo → rodapé) e os une com `\n`. As subclasses implementam apenas os passos que variam: `_titulo()` e `_corpo()` (passos abstratos, obrigatórios) e, opcionalmente, o **hook** `_rodape()` — que por padrão apenas fecha com o separador. `ResearcherReport` sobrescreve `_rodape()` para acrescentar o índice geral; `JournalistReport` usa o comportamento padrão.
+### 5.2 Template Method — `reporter.py`
 
 ```mermaid
 classDiagram
     class Report {
         <<abstract>>
-        +gerar(resultados: list) str
-        +_titulo()* str
-        +_corpo(resultados: list)* str
-        +_rodape(resultados: list) str
+        +gerar(indices) str
+        #_titulo() str
+        #_corpo(indices) list
+        #_rodape(indices) list
     }
-
-    class ResearcherReport {
-        +_titulo() str
-        +_corpo(resultados: list) str
-        +_rodape(resultados: list) str
-    }
-
-    class JournalistReport {
-        +_titulo() str
-        +_corpo(resultados: list) str
-    }
-
     Report <|-- ResearcherReport
     Report <|-- JournalistReport
-    main ..> Report : instancia conforme o modo
+    note for Report "gerar() é o template method: fixa o esqueleto cabeçalho → corpo → rodapé. As subclasses implementam _titulo() e _corpo()."
 ```
 
-**Por que Template Method (e não Strategy):** aqui o que varia são os **passos** de um algoritmo de montagem fixo, não o algoritmo inteiro. A classe-base controla o fluxo e chama os passos das subclasses — inversão de controle ("não me chame, eu te chamo"). Para este caso, herança com passos sobrescritos é mais direta do que plugar objetos de estratégia. (O domínio é distinto do Padrão 1: lá variam os dados/algoritmo de cálculo por poluente; aqui varia o conteúdo de um relatório de estrutura fixa.)
-
-**Como adicionar um novo formato (ex: relatório resumido):** criar `SummaryReport(Report)` implementando `_titulo()` e `_corpo()` (e o hook `_rodape()`, se precisar). `gerar()` e a estrutura geral não mudam — Open/Closed Principle.
+Os dois relatórios seguem o **mesmo esqueleto** — cabeçalho, corpo e rodapé, unidos por quebras de linha —, mudando apenas o conteúdo de cada passo. `Report.gerar()` fixa essa ordem (o *template method*, que não deve ser sobrescrito) e delega os passos variáveis `_titulo()` e `_corpo()` às subclasses, oferecendo `_rodape()` como *hook* opcional. `ResearcherReport` produz o detalhamento técnico por dia/estação; `JournalistReport` produz as frases em linguagem leiga. O padrão garante relatórios **consistentes em forma** e torna trivial acrescentar um terceiro público no futuro.
 
 ---
 
-## 4. Demonstração Funcional
+## 6. Contrato de dados e o conversor
 
-Executar a partir da pasta `codigo/`:
+O sistema lê **somente** o contrato abaixo — a origem do dado é irrelevante para ele:
 
-```bash
-# Relatório técnico (HU-01 — pesquisador)
-python main.py sample_data.csv pesquisador
+| coluna | tipo | exemplo |
+|--------|------|---------|
+| `data` | texto no formato `YYYY-MM-DD` | `2020-01-18` |
+| `estacao` | texto | `CSN` |
+| `poluente` | texto (`MP10`, `MP2,5`, `O3`, `CO`, `NO2`, `SO2`) | `SO2` |
+| `concentracao` | decimal não negativo | `80.86` |
+| `unidade` | texto | `µg/m³` |
 
-# Episódios críticos (HU-02 — jornalista)
-python main.py sample_data.csv jornalista
-```
+O `conversor.py` é um **utilitário de preparação**: ele pega o dado bruto da rede de monitoramento IEMA-PR (medições **horárias**, com os gases em **ppb**) e produz o `sample_data.csv` já no contrato — médias **diárias**, gases convertidos para **µg/m³** e o CO em **ppm**. Ele roda **uma única vez, fora do fluxo**, e o sistema nunca depende dele em tempo de execução. Essa separação mantém o sistema **desacoplado da fonte**: trocar de fonte de dados significa trocar (ou criar outro) conversor, sem tocar em nenhuma das camadas do sistema.
 
-**Saída esperada — modo pesquisador:**
-```
-[AVISO] Linha 10 ignorada: dados inválidos.
-==============================================================
-  RELATÓRIO TÉCNICO — IQAr (CONAMA 491/2018)
-==============================================================
-  2024-03-10 | Centro       | PM2.5  | Conc.:   18.50 µg/m³  | IQAr:   29.6 | Boa
-  2024-03-10 | Centro       | PM10   | Conc.:   45.00 µg/m³  | IQAr:   36.0 | Boa
-  2024-03-11 | Centro       | PM2.5  | Conc.:   55.20 µg/m³  | IQAr:   88.3 | Ruim
-  ...
-  Índice Geral: 234.3 (Péssima) — Poluente crítico: PM10
-==============================================================
-```
+---
 
-**Saída esperada — modo jornalista:**
-```
-==============================================================
-  EPISÓDIOS CRÍTICOS DE QUALIDADE DO AR
-==============================================================
-  Qualidade do ar Ruim em 2024-03-11 na estação Centro (poluente monitorado: PM2.5).
-  Qualidade do ar Muito Ruim em 2024-03-12 na estação Norte (poluente monitorado: PM2.5).
-  Qualidade do ar Péssima em 2024-03-14 na estação Sul (poluente monitorado: PM10).
-==============================================================
-```
+## 7. Decisões de arquitetura
+
+**Sem interface gráfica.** A interação é feita por um **menu no terminal** (`main.py`), conforme o enunciado. Como conveniência, o `main` também aceita argumentos opcionais (`python main.py <arquivo.csv> <modo>`) para execução rápida, sem alterar o fluxo principal.
+
+**Consolidação como etapa explícita.** O índice diário por estação (HU-01.3) é uma etapa de processamento própria (`consolidador.py`), separada do cálculo por poluente (`calculator.py`). Isso mantém cada responsabilidade testável de forma isolada e faz a consolidação alimentar tanto o relatório técnico quanto o filtro de dias críticos.
+
+**Dois padrões distintos, em camadas distintas.** Strategy e Template Method atuam em pontos de variação diferentes — o *como calcular* na camada de processamento e o *como apresentar* na camada de saída —, evitando forçar um único padrão onde ele não se encaixa.
+
+**Norma CONAMA 491/2018.** Os *breakpoints* do IQAr seguem a tabela da CETESB referente à Resolução 491/2018. Não se utiliza a CONAMA 506/2024 por ser posterior ao período dos dados analisados (ano de 2020), quando a 491 estava em vigor.
