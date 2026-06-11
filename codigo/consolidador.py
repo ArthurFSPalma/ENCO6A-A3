@@ -14,6 +14,9 @@ from dataclasses import dataclass
 from calculator import CALCULADORAS
 from reader import Medicao
 
+# Faixas consideradas críticas para o filtro de dias críticos (HU-02.1).
+FAIXAS_CRITICAS: frozenset[str] = frozenset({"Ruim", "Muito Ruim", "Péssima"})
+
 
 @dataclass
 class ResultadoPoluente:
@@ -135,3 +138,19 @@ def consolidar(medicoes: list[Medicao]) -> list[IndiceDiario]:
 
     indices.sort(key=lambda indice: (indice.data, indice.estacao))
     return indices
+
+
+def filtrar_criticos(indices: list[IndiceDiario]) -> list[IndiceDiario]:
+    """
+    Filtra os dias críticos a partir do índice diário consolidado (HU-02.1).
+
+    Critério: faixa geral em Ruim, Muito Ruim ou Péssima.
+
+    Args:
+        indices: Índices diários consolidados (saída de consolidar()).
+
+    Returns:
+        Lista apenas com os IndiceDiario em faixa crítica, preservando a
+        ordem cronológica recebida.
+    """
+    return [indice for indice in indices if indice.faixa_geral in FAIXAS_CRITICAS]
