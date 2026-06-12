@@ -33,7 +33,7 @@ O protótipo é validado sobre dados **reais e públicos**: a série histórica 
 
 O conjunto cobre **8 estações de monitoramento** e cinco dos seis poluentes da norma — **MP10, O₃, CO, NO₂ e SO₂** (essa rede não monitora MP2,5; ainda assim, o sistema suporta o cálculo dos seis poluentes previstos na CONAMA 491/2018). Os dados brutos vêm em **frequência horária**, com os gases expressos em **ppb** e o monóxido de carbono em **ppm**.
 
-Como esse formato bruto não corresponde ao contrato de entrada do sistema, a preparação fica a cargo de um **utilitário separado** (`conversor.py`): ele agrega as medições horárias em **médias diárias**, converte os gases de ppb para **µg/m³** e padroniza a saída nas cinco colunas do contrato (`data`, `estacao`, `poluente`, `concentracao`, `unidade`). Dessa forma, o sistema permanece **desacoplado da fonte** — ele lê apenas o contrato, e a origem específica do dado é responsabilidade do conversor.
+Como esse formato bruto não corresponde ao contrato de entrada do sistema, a preparação dos dados foi incorporada como um passo opcional no menu principal através do módulo conversor.py. Quando acionado, ele agrega as medições horárias em médias diárias, converte os gases de ppb para µg/m³ e padroniza a saída nas cinco colunas do contrato (data, estacao, poluente, concentracao, unidade). Dessa forma, a lógica central do sistema permanece desacoplada da fonte — o fluxo principal processa apenas o contrato, e o tratamento da origem específica do dado continua devidamente encapsulado na etapa do conversor.
 
 ### Fontes
 
