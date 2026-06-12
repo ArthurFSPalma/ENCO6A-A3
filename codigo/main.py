@@ -30,7 +30,7 @@ if hasattr(sys.stdout, "reconfigure"):
 
 # Pasta deste script, resolvida em relação ao arquivo: usada para listar os
 # CSVs e gravar os convertidos. Funciona em qualquer computador.
-PASTA: Path = Path(__file__).resolve().parent
+PASTA: Path = Path(sys.executable).resolve().parent if getattr(sys, 'frozen', False) else Path(__file__).resolve().parent
 
 
 def listar_csvs(pasta: Path) -> list[Path]:
