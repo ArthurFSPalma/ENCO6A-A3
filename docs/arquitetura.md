@@ -194,9 +194,11 @@ A etapa de preparação (`conversor.py`) é quem cuida da origem do dado. Ela re
 
 ## 7. Decisões de arquitetura
 
-**Sem interface gráfica.** Toda a interação é por menu no terminal (`main.py`): escolha da ação, seleção do arquivo a partir de uma lista e escolha do público do relatório. Não há janelas nem GUI, conforme o enunciado.
-
-**Portabilidade e arquivos junto do código.** Os caminhos são resolvidos em relação à pasta do próprio script (`Path(__file__)`), então o sistema roda em qualquer computador, sem caminhos fixos a uma máquina. Os arquivos necessários ficam na pasta do projeto, e os convertidos são gravados ali, aparecendo na lista de seleção.
+**Portabilidade e arquivos junto do código.** Os caminhos são resolvidos em relação à pasta do próprio script (Path(__file__)),
+então o sistema roda em qualquer computador, sem caminhos fixos a uma máquina.
+Para distribuição como executável, o caminho é resolvido via sys.executable quando
+o sistema está empacotado (sys.frozen), mantendo a mesma portabilidade no .exe gerado
+pelo PyInstaller.
 
 **Preparação integrada, mas isolada.** A conversão é um passo opcional oferecido no menu, e não um pré-requisito embutido na análise. A análise continua lendo apenas o contrato — a preparação existe só para produzir esse contrato a partir de um dado bruto.
 
