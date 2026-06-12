@@ -12,6 +12,8 @@ equação de interpolação linear do Anexo da CONAMA 491/2018:
 
     IQAr = ((Ifin - Iini) / (Cfin - Cini)) * (C - Cini) + Iini
 
+Não se usa a Resolução CONAMA 506/2024, posterior ao período dos dados
+analisados (2020), quando a 491/2018 estava em vigor.
 """
 
 from abc import ABC, abstractmethod
