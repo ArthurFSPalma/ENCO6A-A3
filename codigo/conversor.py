@@ -1,7 +1,7 @@
 """
 conversor.py — Utilitário de preparação de dados.
 
-NÃO faz parte do pipeline do sistema. É executado uma única vez para
+É executado uma única vez para
 transformar o CSV bruto exportado da plataforma do IEMA (formato horário,
 com unidades mistas) no contrato de entrada do sistema (sample_data.csv):
 
