@@ -18,6 +18,7 @@ Uso:
 """
 
 import sys
+from pathlib import Path
 
 import pandas as pd
 
@@ -39,22 +40,52 @@ UNIDADE_NORMA: dict[str, str] = {
     "CO": "ppm",
 }
 
-ARQUIVO_PADRAO: str = "PR2020.csv"
-ARQUIVO_SAIDA: str = "sample_data.csv"
+# Caminhos padrão resolvidos em relação à pasta deste script, para que o
+# utilitário funcione independentemente do diretório de execução (terminal
+# ou botão "Run" do editor).
+PASTA: Path = Path(__file__).resolve().parent
+ARQUIVO_PADRAO: Path = PASTA / "PR2020.csv"
+
+# Colunas esperadas no CSV bruto do IEMA (usadas para validar a entrada).
+COLUNAS_BRUTAS: set[str] = {"Data", "Estacao", "Poluente", "Valor", "Unidade"}
+
+# Sufixo aplicado ao nome do arquivo bruto para gerar o nome do convertido.
+SUFIXO_CONVERTIDO: str = "_convertido"
 
 
-def converter(caminho_bruto: str, caminho_saida: str = ARQUIVO_SAIDA) -> None:
+def converter(caminho_bruto: str | Path, caminho_saida: str | Path | None = None) -> Path:
     """
     Transforma o CSV bruto do IEMA no contrato de entrada do sistema.
 
     Args:
-        caminho_bruto: Caminho do CSV exportado da plataforma do IEMA.
-        caminho_saida: Caminho do CSV de saída no contrato de cinco colunas.
+        caminho_bruto: Caminho do CSV bruto exportado da plataforma do IEMA.
+        caminho_saida: Caminho do CSV de saída. Se None, é derivado do nome do
+            arquivo bruto (ex.: 'PR2020.csv' -> 'PR2020_convertido.csv') e
+            gravado na pasta deste utilitário.
 
     Returns:
-        None. Grava o arquivo de saída e imprime um resumo no terminal.
+        O caminho (Path) do arquivo convertido gerado.
+
+    Raises:
+        ValueError: Se o arquivo não tiver as colunas esperadas de um CSV
+            bruto do IEMA.
+        FileNotFoundError: Se o arquivo bruto não for encontrado.
     """
+    caminho_bruto = Path(caminho_bruto)
+    if caminho_saida is None:
+        caminho_saida = PASTA / f"{caminho_bruto.stem}{SUFIXO_CONVERTIDO}.csv"
+    else:
+        caminho_saida = Path(caminho_saida)
+
     df = pd.read_csv(caminho_bruto)
+
+    # Valida que é um CSV bruto do IEMA (e não, por exemplo, um já convertido).
+    faltando = COLUNAS_BRUTAS - set(df.columns)
+    if faltando:
+        raise ValueError(
+            "o arquivo nao parece ser um CSV bruto do IEMA — "
+            f"faltam colunas: {sorted(faltando)}"
+        )
 
     # 1. Apenas poluentes do IQAr, com valor numérico não negativo.
     df = df[df["Poluente"].isin(POLUENTES_IQAR)].copy()
@@ -86,11 +117,13 @@ def converter(caminho_bruto: str, caminho_saida: str = ARQUIVO_SAIDA) -> None:
     ).reset_index(drop=True)
     contrato.to_csv(caminho_saida, index=False, encoding="utf-8")
 
-    print(f"'{caminho_saida}' gerado com sucesso.")
+    print(f"'{caminho_saida.name}' gerado com sucesso.")
     print(f"  Linhas:    {len(contrato)}")
     print(f"  Estacoes:  {contrato['estacao'].nunique()}")
     print(f"  Poluentes: {sorted(contrato['poluente'].unique())}")
     print(f"  Periodo:   {contrato['data'].min()} a {contrato['data'].max()}")
+
+    return caminho_saida
 
 
 if __name__ == "__main__":
