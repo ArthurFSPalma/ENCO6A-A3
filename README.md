@@ -1,6 +1,5 @@
 # Analisador de Qualidade do Ar — IQAr (CONAMA 491/2018)
 
-> **Sprint 4 — Entrega Final**
 > Sistema desenvolvido em Python para o processamento, cálculo e geração de relatórios do Índice de Qualidade do Ar (IQAr) com base nos critérios estabelecidos pela Resolução CONAMA 491/2018.
 
 ---
