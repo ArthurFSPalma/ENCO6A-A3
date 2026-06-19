@@ -32,7 +32,7 @@ python -m unittest discover tests
 | 2 | `test_mp10_edge_case_fronteira` | Edge Case | MP10 com concentração exata no limite (50.0) retorna IQAr 40 sem pular de faixa |
 | 3 | `test_mp10_falha_extremo_superior` | Falha | MP10 com concentração absurda (9999.0) retorna o teto IQAR_MAXIMO (400) e "Péssima" |
 | 4 | `test_o3_sucesso_faixa_ruim` | Sucesso | O3 com concentração 145.0 retorna IQAr 100 e faixa "Ruim" |
-| 5 | `test_o3_edge_case_zero` | Edge Case | O3 com concentração 0.0 retorna IQAr 0 e faixa "Boa" |
+| 5 | `test_o3_edge_case_zero` | Edge Case |O3 com concentração exata no limite (100.0) retorna IQAr 40 e mantém a faixa "Boa", sem pular para "Moderada" |
 | 6 | `test_o3_extremo_superior` | Falha | O3 com concentração 1000.0 (acima do breakpoint final) retorna IQAR_MAXIMO |
 
 ### `test_consolidador.py` — Consolidação (consolidador.py)
