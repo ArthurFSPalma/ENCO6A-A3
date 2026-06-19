@@ -17,7 +17,7 @@ Para cada método testado, foram implementados **três cenários obrigatórios**
 
 A partir da **raiz do repositório**, executar:
 ```bash
-python -m unittest discover tests
+python -m unittest discover tests -v
 ```
 
 ---
